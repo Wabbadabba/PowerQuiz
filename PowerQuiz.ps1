@@ -3,7 +3,7 @@
     Runs practice quizzes in the terminal
 
     .DESCRIPTION
-    The Practice_Quiz.ps1 script allows for users to run through quizzes.
+    The PowerQuiz.ps1 script allows for users to run through quizzes.
 
     To create your own quiz:
     - Locate '.\quiz_data\quiz_template.csv'
@@ -17,16 +17,20 @@
       - Edit the variable at the top of the script called "$quiz_file"
 
     .INPUTS
-    None. You can't pipe objects to Practice_Quiz.ps1
+    None. You can't pipe objects to PowerQuiz.ps1
 
     .OUTPUTS
     Interactive Menu. Follow input directions.
 
     .EXAMPLE
-    PS> .\Practice_Quiz.ps1
+    PS> .\PowerQuiz.ps1
 
     .NOTES
+    Author: Shawn Wabschall
+    Last Update: October2023
     
+    .LINK
+    https://github.com/Wabbadabba/PowerQuiz
 
 #>
 
@@ -82,36 +86,44 @@ function New-Quiz {
             if ($answer_bank[$rtn] -eq $current_question.True_Answer){
                 Write-Host "Correct!`n" -ForegroundColor Green
                 $correct++
-            }else {
+            }
+            else {
                 Write-Host "Incorrect`n" -ForegroundColor Red
             }
+        }
+        else {
+            Write-Host "Incorrect`n" -ForegroundColor Red
         }
     }
     $grade = ($correct / $size) * 100
     Write-Host "You scored a $grade% ($correct / $size)"
     if ($grade -ge $passing_score){
-        Write-Host "You passed!"
+        Write-Host "You passed!" -ForegroundColor Green
     }else{
-        Write-Host "You did not meet the minimum score of $passing_score%"
+        Write-Host "You did not meet the minimum score of $passing_score%" -ForegroundColor Red
     }
 }
 
 function Show-Settings{
+    # Displays Current Settings.
+
     Clear-Host
-    Write-Host "========Practice Test========"
-    Write-Host "    Loaded       : $($quiz_file.Split('\')[-1].Split('.')[0])"
-    Write-Host "    Size         : $size"
-    Write-Host "    Passing Score: $passing_score%"
-    Write-Host "=============================`n`n"
+    Write-Host "========= Practice Test =========" -ForegroundColor Yellow
+    Write-Host "    Loaded       : $($quiz_file.Split('\')[-1].Split('.')[0])" -ForegroundColor Cyan
+    Write-Host "    Size         : $size" -ForegroundColor Cyan
+    Write-Host "    Passing Score: $passing_score%" -ForegroundColor Cyan
+    Write-Host "=================================`n" -ForegroundColor Yellow
 }
 
 function Show-SettingsMenu{
+    # Displays the Settings Menu, and allows for the changing of settings 
+
     Show-Settings
     $file = [ChoiceDescription]::new('&File','Change Quiz Source Filepath')
     $q_size = [ChoiceDescription]::new('&Size','Change Number of Questions Asked')
-    $Pass = [ChoiceDescription]::new('&Passing Score','Change Score needed to Pass')
+    $pass = [ChoiceDescription]::new('&Passing Score','Change Score needed to Pass')
     $back = [ChoiceDescription]::new('&Back','Back to Main Menu')
-    $options = [ChoiceDescription[]]($file,$q_size,$back)
+    $options = [ChoiceDescription[]]($file,$q_size,$pass,$back)
     $choice = $host.UI.PromptForChoice("Select Option","",$options,-1)
 
     switch ($choice) {
@@ -123,7 +135,11 @@ function Show-SettingsMenu{
             $size = Read-Host "How long would you like the test to be?"
             Show-SettingsMenu
         }
-        2 { 
+        2 {
+            $passing_score = Read-Host "Input new Passing Score"
+            Show-SettingsMenu
+        }
+        3 { 
             Show-Menu 
         }
     }
@@ -135,11 +151,11 @@ function Show-Menu {
     )
 
     Show-Settings
-    Write-Host "Options:"
-    Write-Host "--Run a new quiz"
-    Write-Host "--Change Settings"
-    Write-Host "--Exit the program"
-    Write-Host "============================="
+    Write-Host "Options:" -ForegroundColor Cyan
+    Write-Host "--Run a new quiz" -ForegroundColor Cyan
+    Write-Host "--Change Settings" -ForegroundColor Cyan
+    Write-Host "--Exit the program" -ForegroundColor Cyan
+    Write-Host "=============================" -ForegroundColor Yellow
 
     $run = [ChoiceDescription]::new('&Run','Run a quiz')
     $settings = [ChoiceDescription]::new('&Settings','Edit Settings')
@@ -148,9 +164,16 @@ function Show-Menu {
     $choice = $host.UI.PromptForChoice("Select Option","",$options,-1)
 
     switch ($choice){
-        0 {New-Quiz $quiz_file}
-        1 {Show-SettingsMenu}
-        2 {break}
+        0 {
+            New-Quiz $quiz_file
+        }
+        1 {
+            Show-SettingsMenu
+        }
+        2 {
+            Write-Host "`nGoodbye  ¯\_(ツ)_/¯ "
+            break
+        }
     }
 }
 
