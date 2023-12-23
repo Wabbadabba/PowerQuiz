@@ -48,15 +48,15 @@ class Quiz {
 
     # Initialization a new instance of the 'quiz' class.
     Quiz([int]$Length, [int]$PassingScore, [bool]$FeedbackMode, [string]$FilePath) {
-        $this.Length = $Length
+        $this.Length       = $Length
         $this.PassingScore = $PassingScore
         $this.FeedbackMode = $FeedbackMode
-        $this.FilePath = Resolve-Path -Path $FilePath -ErrorAction SilentlyContinue
-        $this.DataBank = Import-Csv -Path $this.FilePath
+        $this.FilePath     = Resolve-Path -Path $FilePath -ErrorAction SilentlyContinue
+        $this.DataBank     = Import-Csv -Path $this.FilePath
     }
 
     # Grades the quiz based on the final score.
-    [void]GradeQuiz([int]$finalScore){
+    [void]GradeQuiz ([int]$finalScore) {
         $gradePercentage = ($finalScore / $this.Length) * 100
 
         Write-Host "You scored a $gradePercentage% ($finalScore / $($this.Length))"
@@ -76,52 +76,37 @@ class Quiz {
         $questionCount = 0
 
         # Randomizes questions and iterates through the list.
-        $this.DataBank | Sort-Object { Get-Random } | ForEach-Object {
-            if ($questionCount -lt $this.Length){
+        foreach ($Q in $this.DataBank | Sort-Object { Get-Random }) {
+            if ($questionCount -eq $this.Length) { break }
+            $questionCount += 1
+            Write-Host "$($Q.Question)"
+            Write-Host "------------`n"
+
+            $AnswerTable = @{}
+
+            [string[]]$Answers = $Q.Answer_1, $Q.Answer_2, $Q.Answer_3, $Q.Answer_4 | Get-Random -Count 4 | Where-Object { $_ -ne '-' }
+            [string[]]$Letters = "ABCD"[0..($Answers.Count - 1)] | Get-Random -Count $Answers.Count
+            foreach ($i in 0..($Answers.Count - 1)) {
+                $AnswerTable[$Letters[$i]] = $Answers[$i]
+            }
+            $sortedAnswerTable = $AnswerTable.GetEnumerator() | Sort-Object -Property Name
+            $sortedAnswerTable | ForEach-Object { Write-Host "[$($_.Name)] $($_.Value)"}
+
+            $Guess = Read-Host "`nMake a Selection"
+
+            if ($Guess -eq 'q') { 
+                Write-Host "`n`n+------------------------------------------+" -ForegroundColor Magenta
+                Write-Host "| [!] Exiting Quiz. Returning to main menu |" -ForegroundColor Magenta
+                Write-Host "+------------------------------------------+`n`n" -ForegroundColor Magenta
                 
-                Write-Host "$($_.Question)"
-                Write-Host "------------`n"
-
-                $answerLetter = 0
-                $answerTable = @{}
-
-                # Randomizes the answer order while maintaining option letter order.
-                # ASCII int value for 'A' is 65. This is required so an array of letters.
-                foreach ( $num in (1..4 | Sort-Object { Get-Random })) {
-                    $ans = $_.("Answer_" + $num)
-                    if ($ans -ne '-') {
-                        $letter = "$([char]($answerLetter + 65))"
-                        $answerTable.Add($letter, $ans)
-                        Write-Host "[$letter] $ans"
-                        $answerLetter += 1
-                    }
-                }
-
-                $guess = (Read-Host "`nMake a Selection").ToUpper()
-
-                # Check if the input is correct or not and provide feedback if Feedback Mode is turned on
-                if ([int][char]$guess - 65 -le 4) {
-                    if ($answerTable[$guess] -eq $_.True_Answer) {
-                        if ($this.FeedbackMode -eq $true){
-                            Write-Host "Correct!`n" -ForegroundColor Green
-                        }
-                        $correctCount += 1
-                    }
-                    else {
-                        if ($this.FeedbackMode -eq $false){
-                            Write-Host "Incorrect!`n" -ForegroundColor Red
-                        }
-                    }
-                }
-                # Exits the quiz if 'q' is input
-                elseif ($guess -eq 'q') {
-                    Write-Host "`n`n+------------------------------------------+" -ForegroundColor Magenta
-                    Write-Host "| [!] Exiting Quiz. Returning to main menu |" -ForegroundColor Magenta
-                    Write-Host "+------------------------------------------+`n`n" -ForegroundColor Magenta
-                    
-                    break
-                }
-                $questionCount += 1
+                break
+            }
+            if ($AnswerTable[$Guess] -eq $Q.True_Answer) {
+                Write-Host "Correct!`n" -ForegroundColor Green
+                $correctCount += 1
+            }
+            elseif (!$this.FeedbackMode) {
+                Write-Host "Incorrect!`n" -ForegroundColor Red
             }
         }
         $this.GradeQuiz($correctCount)
@@ -178,11 +163,11 @@ function Show-Settings {
 
     $Settings = @()
 
-    foreach ($property in $properties){
+    foreach ($property in $properties) {
         $Settings += [PSCustomObject]@{
-            Name = $property.ToUpper()
-            Value = $data.$property
-            CanEdit = $helpInfo[$property.ToUpper()][0]
+            Name        = $property.ToUpper()
+            Value       = $data.$property
+            CanEdit     = $helpInfo[$property.ToUpper()][0]
             Description = $helpInfo[$property.ToUpper()][1]
         }
     }
@@ -196,7 +181,9 @@ function Show-Settings {
 # When the 'run' command is given:
 # Run the quiz according to the contents of $data
 function Invoke-CommandRun {
-    param ([PSCustomObject]$data)
+    param (
+        [PSCustomObject]$data
+    )
     $Quiz = [Quiz]::new($data.QuizLength, $data.PassingScore, $data.FeedbackMode, $data.FilePath)
     Write-Host "[+] Created new instance of Quiz()" -ForegroundColor Yellow
     Write-Host "[+]   --QUIZLENGTH   = $($data.QuizLength)" -ForegroundColor Yellow
@@ -205,7 +192,6 @@ function Invoke-CommandRun {
     Write-Host "[+]   --FILEPATH     = $($data.FilePath)" -ForegroundColor Yellow
     Write-Host "[+] Starting Quiz`n" -ForegroundColor Yellow
     $Quiz.RunQuiz()
-    Show-Menu $data
 }
 
 # When the 'Show' command is given:
@@ -229,21 +215,20 @@ function Invoke-CommandSet {
         [PSCustomObject]$data,
         [array]$command
     )
-
     Write-Host $command[1]
     switch ($command[1]) {
-        QUIZLENGTH {
+        QUIZLENGTH{
             if ($command.Length -ge 3) {
                 try {
                     [int]$setValue = $command[2]
                     if ($setValue -gt 0 -and $setValue -le $data.FileSize) {
                         $data.QuizLength = $setValue
                         Write-Host "[+] $($command[1].ToUpper()) => $($setValue)`n" -ForegroundColor Yellow
-                    }
+                    } 
                     else { Write-Host "Invalid input. Value must be between 1 and FileSize`n" -ForegroundColor Red }
                 }
                 catch { Write-Host "Invalid input. Value must be a number`n" -ForegroundColor Red }
-            }
+            } 
             else { Write-Host "No value given. $($command[1].ToUpper()) not changed`n" -ForegroundColor Red }
         }
         PASSINGSCORE {
@@ -256,7 +241,7 @@ function Invoke-CommandSet {
                     }
                     else { Write-Host "Invalid input. Value must be between 1 and 100`n" -ForegroundColor Red }
                 }
-                catch { Write-Host "Invalid input. Value must be a number`n" -ForegroundColor Red }
+                catch{ Write-Host "Invalid input. Value must be a number`n" -ForegroundColor Red }
             }
             else { Write-Host "No value given. $($command[1].ToUpper()) not changed`n" -ForegroundColor Red }
         }
@@ -269,7 +254,7 @@ function Invoke-CommandSet {
         FILEPATH {
             if ($command.Length -ge 3) {
                 $setValue = $command[2]
-                if (Test-Path -PathType Leaf -Path $setValue){
+                if (Test-Path -PathType Leaf -Path $setValue) {
                     $data.FilePath = $setValue
                     $data.FileSize = (Import-Csv $setValue).Length
                     Write-Host "[+] $($command[1].ToUpper()) => $($setValue)" -ForegroundColor Yellow
@@ -350,13 +335,13 @@ $Host.UI.RawUI.ForegroundColor = [System.ConsoleColor]::White
 ###########################
 # EDIT THIS FOR DEFAULTS  #
 ###########################
+$FilePath = ".\quiz_data\quiz_template.csv"
 $data = [PSCustomObject]@{
-    QuizLength = 5
+    QuizLength   = 5
     PassingScore = 80
     FeedbackMode = $false
-    FilePath = ".\quiz_data\quiz_template.csv"
+    FilePath     = $FilePath
+    FileSize     = @(Import-Csv $FilePath).Count
 }
-
-$data | Add-Member -MemberType NoteProperty -Name FileSize -Value (Import-Csv $data.FilePath).Length
 
 Show-Menu $data
