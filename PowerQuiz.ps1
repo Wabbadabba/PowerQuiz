@@ -1,9 +1,10 @@
 <#
-    .SYNOPSIS
-    Runs practice quizzes in the terminal
+.SYNOPSIS
+    PowerShell script for a Practice Test Taking Tool.
 
-    .DESCRIPTION
-    The PowerQuiz.ps1 script allows for users to run through quizzes.
+.DESCRIPTION
+    This script defines a PowerShell class 'quiz' for managing quizzes and includes functions to interactively run quizzes,
+    display settings, and modify settings through a command-line menu interface.
 
     To create your own quiz:
     - Locate '.\quiz_data\quiz_template.csv'
@@ -12,337 +13,350 @@
 
     To use custom quiz:
     - Temporarily:
-      - Use Settings menu to edit file path
+    - Use 'set [OPTION] [VALUE]' command in the running script to edit file path
     - Permanently
-      - Edit the variable at the top of the script called "$quiz_file"
+    - Edit the object "$data" at the bottom of the script
 
-    .INPUTS
+.INPUTS
     None. You can't pipe objects to PowerQuiz.ps1
 
-    .OUTPUTS
+.OUTPUTS
     Interactive Menu. Follow input directions.
 
-    .EXAMPLE
-    PS> .\PowerQuiz.ps1
-
-    .NOTES
+.NOTES
+    File: QuizTool.ps1
     Author: Shawn Wabschall
     Last Update: October2023
-    
-    .LINK
+
+.EXAMPLE
+    To start the quiz tool, run the script and follow the interactive menu prompts:
+    PS C:\> .\QuizTool.ps1
+
+    The menu provides options to run a quiz, display current settings, change settings, and exit the program.
+
+.LINK
     https://github.com/Wabbadabba/PowerQuiz
 
 #>
 
-using namespace System.Management.Automation.Host
+class Quiz {
+    [int]$Length
+    [int]$PassingScore
+    [bool]$FeedbackMode
+    [string]$FilePath
+    [pscustomobject]$DataBank
 
-"$data_file = Get-Content -Raw .\data.json | ConvertFrom-Json"
-
-$loaded_quiz = $data_file[0]
-$quiz_file = $loaded_quiz.FileName
-
-
-#############################################
-# DEFAULT CONFIGS
-# Edit these to change default settings
-#############################################
-$size = 2
-$passing_score = 80
-$feedback = $false
-#############################################
-
-function Show-Feedback {
-    param (
-        [Parameter(Mandatory=$true)]
-        [string]$response,
-
-        [parameter(Mandatory=$true)]
-        [ValidateSet("pos","neg")]
-        [string]$type
-    )
-
-    if ($feedback -eq $true) {
-        if ($type -eq "pos") {
-            Write-Host $response -ForegroundColor Green
-        }
-        elseif ($type -eq "neg") {
-            Write-Host $response -ForegroundColor Red
-        }
+    # Initialization a new instance of the 'quiz' class.
+    Quiz([int]$Length, [int]$PassingScore, [bool]$FeedbackMode, [string]$FilePath) {
+        $this.Length = $Length
+        $this.PassingScore = $PassingScore
+        $this.FeedbackMode = $FeedbackMode
+        $this.FilePath = Resolve-Path -Path $FilePath -ErrorAction SilentlyContinue
+        $this.DataBank = Import-Csv -Path $this.FilePath
     }
-}
 
-function Get-Question {
-    param (
-        [parameter(Mandatory=$true)]
-        [System.Object]$question
-    )
-    $script:answer_bank = @{}
-    $options = @("A","B","C","D")
-    foreach ( $num in (1..4 | Sort-Object {Get-Random})){
-        $ans = $question.("Answer_" + $num)
-        if ( $ans -ne '-'){
-            $answer_bank.Add(
-                $options[$answer_bank.count],
-                $ans
-            )
-        }
-    }
-        # Output Question and Answer Options
-        
-        Write-Host "$($quiz.IndexOf($question) + 1). $($question.Question)"
-        foreach ($entry in ($answer_bank.GetEnumerator() | Sort-Object -Property Name)){
-            Write-Host "   $($entry.Key). $($entry.Value)"
-        }
-        Write-Host ""
-}
+    # Grades the quiz based on the final score.
+    [void]GradeQuiz([int]$finalScore){
+        $gradePercentage = ($finalScore / $this.Length) * 100
 
-function New-Quiz {
-    # Main Quiz function
+        Write-Host "You scored a $gradePercentage% ($finalScore / $($this.Length))"
 
-    param (
-        [string]$file
-    )
-
-    $filename = Join-Path -Path (Join-Path -Path $PSScriptRoot -ChildPath "quiz_data") -ChildPath $file
-    $quiz = Import-Csv $filename | Sort-Object {Get-Random}
-    $correct = 0
-
-    Clear-Host
-    for ($i = 0; $i -lt $size; $i++) {
-        $current_question = $quiz[$i]
-        Get-Question $current_question
-        $rtn = Read-Host "Make a Selection"
-        if ($answer_bank.ContainsKey($rtn)) {
-            if ($answer_bank[$rtn] -eq $current_question.True_Answer){
-                # Write-Host "Correct!`n" -ForegroundColor Green
-                Show-Feedback -response "Correct!`n" -type "pos"
-                $correct++
-            }
-            else {
-                # Write-Host "Incorrect`n" -ForegroundColor Red
-                Show-Feedback -response "Incorrect`n" -type "neg"
-            }
+        if ($gradePercentage -ge $this.PassingScore){
+            Write-Host "You passed!" -ForegroundColor Green
         }
         else {
-            # Write-Host "Incorrect`n" -ForegroundColor Red
-            Show-Feedback -response "Incorrect`n" -type "neg"
+            Write-Host "You did not meet the minimum score of $($this.PassingScore)%" -ForegroundColor Red
         }
-
-        Write-Host "`n═════════════════════════════════════════`n" -ForegroundColor Yellow
-    }
-    $grade = ($correct / $size) * 100
-    Write-Host "You scored a $grade% ($correct / $size)"
-    if ($grade -ge $passing_score){
-        Write-Host "You passed!" -ForegroundColor Green
-    }else{
-        Write-Host "You did not meet the minimum score of $passing_score%" -ForegroundColor Red
     }
 
-}
+    # Runs the quiz interactively
+    [void]RunQuiz() {
+        Write-Host "Input the 'q' key to exit the quiz and return to the main menu`n" -ForegroundColor Green
+        $correctCount = 0
+        $questionCount = 0
 
-function Show-Settings{
-    # Displays Current Settings.
-    if ($feedback -eq $true){
-        $feedback_mode = "ON"
-    }
-    else {
-        $feedback_mode = "OFF"
-    }
+        # Randomizes questions and iterates through the list.
+        $this.DataBank | Sort-Object { Get-Random } | ForEach-Object {
+            if ($questionCount -lt $this.Length){
+                
+                Write-Host "$($_.Question)"
+                Write-Host "------------`n"
 
-    Clear-Host
-    Write-Host "╔═══════════════════════════════════════╗" -ForegroundColor Yellow
-    Write-Host "║             Practice Test             ║" -ForegroundColor Yellow
-    Write-Host "╚═════════════════╦═════════════════════╝" -ForegroundColor Yellow
-    Write-Host "    Quiz Loaded   ║ $($loaded_quiz.Name)" -ForegroundColor Cyan
-    Write-Host "    File Path     ║ $quiz_file" -ForegroundColor Cyan
-    Write-Host "    Size          ║ $size" -ForegroundColor Cyan
-    Write-Host "    Passing Score ║ $passing_score%" -ForegroundColor Cyan
-    Write-Host "    Feedback Mode ║ $feedback_mode" -ForegroundColor Cyan
-    Write-Host "══════════════════╩══════════════════════`n" -ForegroundColor Yellow
-}
+                $answerLetter = 0
+                $answerTable = @{}
 
-function Show-SettingsMenu{
-    # Displays the Settings Menu, and allows for the changing of settings 
+                # Randomizes the answer order while maintaining option letter order.
+                # ASCII int value for 'A' is 65. This is required so an array of letters.
+                foreach ( $num in (1..4 | Sort-Object { Get-Random })) {
+                    $ans = $_.("Answer_" + $num)
+                    if ($ans -ne '-') {
+                        $letter = "$([char]($answerLetter + 65))"
+                        $answerTable.Add($letter, $ans)
+                        Write-Host "[$letter] $ans"
+                        $answerLetter += 1
+                    }
+                }
 
-    Show-Settings
-    $Load = [ChoiceDescription]::new('&Load','Load new Quiz')
-    $q_size = [ChoiceDescription]::new('&Size','Change Number of Questions Asked')
-    $pass = [ChoiceDescription]::new('&Passing Score','Change Score needed to Pass')
-    $feed = [ChoiceDescription]::new('Fee&dback Mode','Feedback Mode displays Correct or Incorrect answers')
-    $back = [ChoiceDescription]::new('&Back','Back to Main Menu')
-    $options = [ChoiceDescription[]]($load,$q_size,$pass,$feed,$back)
-    $choice = $host.UI.PromptForChoice("Select Option","",$options,-1)
+                $guess = (Read-Host "`nMake a Selection").ToUpper()
 
-    switch ($choice) {
-        0 { 
-            $loaded_quiz = Set-QuizData -data_file $data_file
-            $quiz_file = $loaded_quiz.FileName
-        }
-        1 { 
-            $size = Read-Host "How long would you like the test to be?"
-        }
-        2 {
-            $passing_score = Read-Host "Input new Passing Score"
-        }
-        3 {
-            $change = Read-Host "Type 'ON' or 'OFF' to change."
-            if ($change -eq "ON") {
-                $feedback = $true
-            }
-            elseif ($change -eq "OFF") {
-                $feedback = $false
-            }
-            else {
-                Write-Host "Invalid Response: Type 'ON' or 'OFF' to alter Feedback Mode"
+                # Check if the input is correct or not and provide feedback if Feedback Mode is turned on
+                if ([int][char]$guess - 65 -le 4) {
+                    if ($answerTable[$guess] -eq $_.True_Answer) {
+                        if ($this.FeedbackMode -eq $true){
+                            Write-Host "Correct!`n" -ForegroundColor Green
+                        }
+                        $correctCount += 1
+                    }
+                    else {
+                        if ($this.FeedbackMode -eq $false){
+                            Write-Host "Incorrect!`n" -ForegroundColor Red
+                        }
+                    }
+                }
+                # Exits the quiz if 'q' is input
+                elseif ($guess -eq 'q') {
+                    Write-Host "`n`n+------------------------------------------+" -ForegroundColor Magenta
+                    Write-Host "| [!] Exiting Quiz. Returning to main menu |" -ForegroundColor Magenta
+                    Write-Host "+------------------------------------------+`n`n" -ForegroundColor Magenta
+                    
+                    break
+                }
+                $questionCount += 1
             }
         }
-        4 {
-            Show-Menu
-            return
-        }
-        default {
-            return
-        }
+        $this.GradeQuiz($correctCount)
     }
-    $options.Clear()
-    Show-SettingsMenu
 }
 
-function Save-QuizData {
+# Used to create a prompt without the colon that Read-Host inserts.
+function Read-HostCustom {
+    param (
+        [string]$Prompt
+    )
+    Write-Host $Prompt -NoNewline
+    $Host.UI.ReadLine()
+}
+
+# Display Help Menu
+# TODO: Make Dynamic
+# TODO: Add more info(?)
+function Show-HelpMenu {
+    
+    $output = @"
+
+Core Commands
+=============
+
+    Command          Description
+    -------          -----------
+    run              Runs Loaded Quiz
+    show             Show current settings
+    show quiz        Show content of the currently loaded quiz
+    set              Change settings. Syntax: set [SETTING] [VALUE]
+    x , exit         Exit the program
+
+"@
+    Write-Host $output
+}
+
+# Instead of making a special menu, this just takes the required info, and sets it all into an array of objects
+# That array is then displayed with Format-Table.
+function Show-Settings {
     param (
         [PSCustomObject]$data
     )
 
-    $yes = [ChoiceDescription]::new('&Yes', 'You would like this file saved for later use')
-    $no = [ChoiceDescription]::new('&No', 'You would not like this file saved for later use')
-    $options = [ChoiceDescription[]]($yes, $no)
-    $choice = $host.UI.PromptForChoice("Would you like this file saved for easier use next time?","",$options,-1)
+    $helpInfo = @{
+        QUIZLENGTH   = @($true,"Length of quiz to be run.")
+        PASSINGSCORE = @($true,"Minimum Passing Score. Represented as a Percentage. (Example: '80' would be a minimum passing score of 80%)")
+        FEEDBACKMODE = @($true,"If True, will provide feedback after each question about the correctness of the answer provided.")
+        FILEPATH     = @($true,"If True, will provide feedback after each question about the correctness of the answer provided.")
+        FILESIZE     = @($false,"The total number of questions in the loaded quiz file.")
+    }
 
-    switch($choice) {
-        0 {
-            $data_file = Get-Content -Raw .\data.json | ConvertFrom-Json
-            [array] $data_file += $data
-            $data_file | ConvertTo-Json | Out-File .\data.json
-            return
-        }
-        default {
-            return
+    $properties = $data | Get-Member -MemberType Properties | Select-Object -ExpandProperty Name
+
+    $Settings = @()
+
+    foreach ($property in $properties){
+        $Settings += [PSCustomObject]@{
+            Name = $property.ToUpper()
+            Value = $data.$property
+            CanEdit = $helpInfo[$property.ToUpper()][0]
+            Description = $helpInfo[$property.ToUpper()][1]
         }
     }
+    
+    $Settings | Format-Table -Property Name, @{Expression={$_.Value};Label="Value"; Align="center"}, @{Expression={$_.CanEdit};Label="CanEdit"; Align="center"}, Description
+
+    Write-Host "Change settings with the 'set' command."
+    Write-Host "`nExample: 'set FEEDBACKMODE True'`n"
 }
 
-function Show-QuizFile{
+# When the 'run' command is given:
+# Run the quiz according to the contents of $data
+function Invoke-CommandRun {
+    param ([PSCustomObject]$data)
+    $Quiz = [Quiz]::new($data.QuizLength, $data.PassingScore, $data.FeedbackMode, $data.FilePath)
+    Write-Host "[+] Created new instance of Quiz()" -ForegroundColor Yellow
+    Write-Host "[+]   --QUIZLENGTH   = $($data.QuizLength)" -ForegroundColor Yellow
+    Write-Host "[+]   --PASSINGSCORE = $($data.PassingScore)" -ForegroundColor Yellow
+    Write-Host "[+]   --FEEDBACKMODE = $($data.FeedbackMode)" -ForegroundColor Yellow
+    Write-Host "[+]   --FILEPATH     = $($data.FilePath)" -ForegroundColor Yellow
+    Write-Host "[+] Starting Quiz`n" -ForegroundColor Yellow
+    $Quiz.RunQuiz()
+    Show-Menu $data
+}
+
+# When the 'Show' command is given:
+# Show the raw CSV Content or show current settings
+function Invoke-CommandShow {
     param (
-        [string]$name,
-        [string]$file_name,
-        [int32]$total_size
+        [PSCustomObject]$data,
+        [array]$command
     )
-    Write-Host "`n============= Quiz File Info =============" -ForegroundColor Yellow
-    Write-Host "    Quiz Name   : $name" -ForegroundColor Cyan
-    Write-Host "    File Path   : $file_name" -ForegroundColor Cyan
-    Write-Host "    Total Size  : $total_size" -ForegroundColor Cyan
-    Write-Host "====================================== ===`n" -ForegroundColor Yellow
+    $command = $command.split(' ')
+    switch ($command[1]) {
+        Quiz { Import-Csv -Path $data.FilePath | Format-Table }
+        Default { Show-Settings $data }
+    }
 }
 
-function Set-QuizData {
+# When the 'Set' command is given:
+# Update the $data object with provided values
+function Invoke-CommandSet {
     param (
-        $data_file
+        [PSCustomObject]$data,
+        [array]$command
     )
-    $load = [ChoiceDescription]::new('&Load', 'Load Quiz info from data.json')
-    $manual = [ChoiceDescription]::new('&Manual', 'Manually enter in Quiz Info')
-    $back = [ChoiceDescription]::new('&Back', 'Return to previous menu')
-    $options = [ChoiceDescription[]]($load, $manual, $back)
-    $choice = $host.UI.PromptForChoice("Load from save file or input data manually?","",$options,-1)
 
-    switch ($choice) {
-        0 {
-            ForEach ($file in $data_file) {
-                Show-QuizFile -name $file.Name -file_name $file.FileName -total_size $file.TotalSize
+    Write-Host $command[1]
+    switch ($command[1]) {
+        QUIZLENGTH {
+            if ($command.Length -ge 3) {
+                try {
+                    [int]$setValue = $command[2]
+                    if ($setValue -gt 0 -and $setValue -le $data.FileSize) {
+                        $data.QuizLength = $setValue
+                        Write-Host "[+] $($command[1].ToUpper()) => $($setValue)`n" -ForegroundColor Yellow
+                    }
+                    else { Write-Host "Invalid input. Value must be between 1 and FileSize`n" -ForegroundColor Red }
+                }
+                catch { Write-Host "Invalid input. Value must be a number`n" -ForegroundColor Red }
             }
-
-            $selection = Read-Host "Provide The Quiz Name you would like to load"
-            $selection_quiz = $data_file | Where-Object {$_.Name -eq $selection}
-            $name = $selection_quiz.Name
-            $file_path = $selection_quiz.FileName
-            $total_size = $selection_quiz.TotalSize
-            Show-QuizFile -name $name -file_name $file_path -total_size $total_size
+            else { Write-Host "No value given. $($command[1].ToUpper()) not changed`n" -ForegroundColor Red }
         }
-        1 {
-            
-            $name = Read-Host "Input Quiz Name (A title or what you would like to call it)"
-            $data_folder = Join-Path -Path $PSScriptRoot -ChildPath "quiz_data"
-            do {
-                $file_path = ((Read-Host "Input File Name (with extension)") -replace '"')
-                $file_path_full = Join-Path -Path $data_folder -ChildPath $file_path
-            } while (-not ((Test-Path $file_path_full -PathType Leaf) -and ($file_path -like "*.csv")))
-
-            $total_size = (Import-Csv $file_path_full).Count
-
-            Show-QuizFile -name $name -file_name $file_path -total_size $total_size
+        PASSINGSCORE {
+            if ($command.Length -ge 3) {
+                try {
+                    [int]$setValue = $command[2]
+                    if ($setValue -gt 0 -and $setValue -le 100) {
+                        $data.PassingScore = $setValue
+                        Write-Host "[+] $($command[1].ToUpper()) => $($setValue)`n" -ForegroundColor Yellow
+                    }
+                    else { Write-Host "Invalid input. Value must be between 1 and 100`n" -ForegroundColor Red }
+                }
+                catch { Write-Host "Invalid input. Value must be a number`n" -ForegroundColor Red }
+            }
+            else { Write-Host "No value given. $($command[1].ToUpper()) not changed`n" -ForegroundColor Red }
         }
-        Default {
-            return
+        FEEDBACKMODE {
+            if ($command[2] -eq 'true' -or $command[2] -eq 'false') {
+                $data.FeedbackMode = $command[2].ToLower() -eq 'true'
+                Write-Host "$($command[1].ToUpper()) => $($data.FeedbackMode)`n"
+            }
+        }
+        FILEPATH {
+            if ($command.Length -ge 3) {
+                $setValue = $command[2]
+                if (Test-Path -PathType Leaf -Path $setValue){
+                    $data.FilePath = $setValue
+                    $data.FileSize = (Import-Csv $setValue).Length
+                    Write-Host "[+] $($command[1].ToUpper()) => $($setValue)" -ForegroundColor Yellow
+                    Write-Host "[+] FILESIZE => $($data.FileSize)" -ForegroundColor Yellow
+                }
+                else { Write-Host "Path not found. Please ensure path was input correctly" }
+            }
         }
     }
-
-    $yes = [ChoiceDescription]::new('&Yes', 'The Information is Accurate')
-    $no = [ChoiceDescription]::new('&No', 'The Information is Inaccurate')
-    $back = [ChoiceDescription]::new('&Back', 'Back to previous menu')
-    $options = [ChoiceDescription[]]($yes, $no, $back)
-    $choice = $host.UI.PromptForChoice("Is this correct?","",$options,-1)
-
-    switch ($choice) {
-        0 {
-            $new_quiz = [PSCustomObject]@{
-                Name = $name
-                FileName = $file_path.Split('\')[-1]
-                TotalSize = $total_size
-            }
-            if ($name -notin $data_file.Name){
-                Save-QuizData -data $new_quiz
-            }
-            return $new_quiz
-        }
-        1{
-            Set-QuizData
-        }
-        Default {
-            return
-        }
-    }
+    return $data
 }
 
+
+function Show-Banner {
+    param (
+        [pscustomobject]$data
+    )
+    $banner = @"
+            ____                          ____        _    
+           / __ \____ _      _____  _____/ __ \__  __(_)___
+          / /_/ / __ \ | /| / / _ \/ ___/ / / / / / / /_  /
+         / ____/ /_/ / |/ |/ /  __/ /  / /_/ / /_/ / / / /_
+        /_/    \____/|__/|__/\___/_/   \___\_\__,_/_/ /___/
+                                                   
+====================A Practice Test Taking Tool====================
+
+"@
+
+    Write-Host $banner -ForegroundColor Red
+    $titleInfo = @(
+        "[ Quiz Loaded           : $($data.FilePath) ]",
+        "[ Minimum Passing Score : $($data.PassingScore) ]",
+        "[ Feedback Mode         : $($data.FeedbackMode) ]"
+    )
+    $longestLine = 0
+    foreach ($item in $titleInfo) {
+        if ($item.Length -gt $longestLine) {
+            $longestLine = $item.Length
+        }
+    }
+
+    $spaceCount = $longestLine + 10
+
+    foreach ($item in $titleInfo) {
+        $lengthDiff = $spaceCount - $item.Length
+        $modItem = $item.Substring(0,$item.Length - 2) + (' ' * $lengthDiff) + $item.Substring($item.Length - 2)
+        Write-Host $modItem -ForegroundColor Magenta
+    }
+    Write-Host "`n"
+    Write-Host "-- Type 'run' to start a new quiz"
+    write-Host "-- Type 'show' to see all settings"
+    Write-Host "-- Type 'help' to see all commands"
+    Write-Host "`n"
+}
+# Main Menu Display
 function Show-Menu {
     param (
-        [string]$Title = "Practice Test"
+        [PSCustomObject]$data
     )
 
-    Show-Settings
-    Write-Host "Options:" -ForegroundColor Cyan
-    Write-Host "• Run a new quiz" -ForegroundColor Cyan
-    Write-Host "• Change Settings" -ForegroundColor Cyan
-    Write-Host "• Exit the program" -ForegroundColor Cyan
-    Write-Host "═════════════════════════════════════════" -ForegroundColor Yellow
+    Show-Banner $data
 
-    $run = [ChoiceDescription]::new('&Run','Run a quiz')
-    $settings = [ChoiceDescription]::new('&Settings','Edit Settings')
-    $exit = [ChoiceDescription]::new('E&XIT','Exit the Program')
-    $options = [ChoiceDescription[]]($run,$settings,$exit)
-    $choice = $host.UI.PromptForChoice("Select Option","",$options,-1)
-
-    switch ($choice){
-        0 {
-            New-Quiz $quiz_file
-        }
-        1 {
-            Show-SettingsMenu
-        }
-        2 {
-            Write-Host "`nGoodbye  ¯\_(ツ)_/¯ "
-            break
+    while ($true) {
+        $command = (Read-HostCustom "PQ > ").split(' ')
+        switch ($command[0]) {
+            run  { Invoke-CommandRun  $data }
+            show { Invoke-CommandShow $data $command}
+            set  { $data = Invoke-CommandSet $data $command }
+            help { Show-HelpMenu }
+            {($_ -eq "x") -or ($_ -eq "exit")} { return }
+            Default { continue }
         }
     }
 }
+$Host.UI.RawUI.ForegroundColor = [System.ConsoleColor]::White
 
 
-Show-Menu
+###########################
+# EDIT THIS FOR DEFAULTS  #
+###########################
+$data = [PSCustomObject]@{
+    QuizLength = 5
+    PassingScore = 80
+    FeedbackMode = $false
+    FilePath = ".\quiz_data\quiz_template.csv"
+}
+
+$data | Add-Member -MemberType NoteProperty -Name FileSize -Value (Import-Csv $data.FilePath).Length
+
+Show-Menu $data
