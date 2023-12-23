@@ -105,7 +105,7 @@ class Quiz {
                 Write-Host "Correct!`n" -ForegroundColor Green
                 $correctCount += 1
             }
-            elseif (!$this.FeedbackMode) {
+            elseif ($this.FeedbackMode) {
                 Write-Host "Incorrect!`n" -ForegroundColor Red
             }
         }
@@ -248,7 +248,7 @@ function Invoke-CommandSet {
         FEEDBACKMODE {
             if ($command[2] -eq 'true' -or $command[2] -eq 'false') {
                 $data.FeedbackMode = $command[2].ToLower() -eq 'true'
-                Write-Host "$($command[1].ToUpper()) => $($data.FeedbackMode)`n"
+                Write-Host "[+] $($command[1].ToUpper()) => $($data.FeedbackMode)`n" -ForegroundColor Yellow
             }
         }
         FILEPATH {
